@@ -54,6 +54,8 @@ const sysLog = document.getElementById('system-log');
 const chatMessages = document.getElementById('chat-messages');
 const msgInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
+const attachBtn = document.getElementById('attach-btn');
+const fileInput = document.getElementById('file-input');
 
 function appendLog(msg, type = 'sys') {
     const div = document.createElement('div');
@@ -62,6 +64,44 @@ function appendLog(msg, type = 'sys') {
     div.innerText = `[${timestamp}] ${msg}`;
     sysLog.appendChild(div);
     sysLog.scrollTop = sysLog.scrollHeight;
+}
+
+function appendFileMessage(sender, filename, filetype, dataBuffer, isSelf = false) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    
+    const senderSpan = document.createElement('span');
+    senderSpan.className = 'chat-sender';
+    senderSpan.innerText = `<${sender}>`;
+    if(isSelf) senderSpan.style.color = '#00ff9c';
+    else senderSpan.style.color = '#ff0055'; 
+    
+    div.appendChild(senderSpan);
+    
+    const textNode = document.createTextNode(` FILE TRANSFER COMPLETED: `);
+    div.appendChild(textNode);
+    
+    const blob = new Blob([dataBuffer], { type: filetype });
+    const url = URL.createObjectURL(blob);
+    
+    if (filetype.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'chat-img';
+        const br = document.createElement('br');
+        div.appendChild(br);
+        div.appendChild(img);
+    } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.innerText = `[DOWNLOAD ${filename}]`;
+        link.className = 'chat-file';
+        div.appendChild(link);
+    }
+    
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function appendMessage(sender, msg, isSelf = false) {
@@ -132,13 +172,19 @@ function setupConnection(connection) {
         
         msgInput.disabled = false;
         sendBtn.disabled = false;
+        attachBtn.disabled = false;
+        fileInput.disabled = false;
         msgInput.focus();
         
         appendMessage('SYSTEM', `ENCRYPTED CHANNEL ESTABLISHED WITH ${conn.peer}`);
     });
 
     conn.on('data', (data) => {
-        appendMessage(conn.peer, data, false);
+        if (data && typeof data === 'object' && data.type === 'file') {
+            appendFileMessage(conn.peer, data.filename, data.filetype, data.data, false);
+        } else {
+            appendMessage(conn.peer, data, false);
+        }
     });
 
     conn.on('close', () => {
@@ -164,6 +210,8 @@ function resetConnectionUI() {
     
     msgInput.disabled = true;
     sendBtn.disabled = true;
+    attachBtn.disabled = true;
+    fileInput.disabled = true;
     
     appendMessage('SYSTEM', 'ENCRYPTED CHANNEL TERMINATED.');
 }
@@ -206,6 +254,37 @@ sendBtn.addEventListener('click', sendMessage);
 
 msgInput.addEventListener('keypress', (e) => {
     if(e.key === 'Enter') sendMessage();
+});
+
+attachBtn.addEventListener('click', () => {
+    fileInput.click();
+});
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file || !conn || !conn.open) return;
+    
+    appendLog(`ENCRYPTING FILE [${file.name}] FOR SECURE TRANSFER...`, 'info');
+    
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const arrayBuffer = event.target.result;
+        
+        const payload = {
+            type: 'file',
+            filename: file.name,
+            filetype: file.type,
+            data: arrayBuffer
+        };
+        
+        conn.send(payload);
+        appendFileMessage(peer.id, file.name, file.type, arrayBuffer, true);
+        appendLog(`FILE ALGORITHM EXECUTED. TRANSFER COMPLETE.`, 'sys');
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // reset input
+    fileInput.value = '';
 });
 
 // Boot up
