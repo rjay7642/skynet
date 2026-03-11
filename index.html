@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKYNET - Secure Node Interface</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <canvas id="matrix-canvas"></canvas>
+    <div class="scanlines"></div>
+    
+    <div class="container">
+        <header class="header">
+            <h1 class="glow-text">SKYNET</h1>
+            <p class="subtitle">Encrypted IP Communication System</p>
+        </header>
+        
+        <div class="panel connection-panel">
+            <div class="my-ip">LOCAL NODE IP: <span id="my-ip-display" class="highlight">INITIALIZING...</span></div>
+            <div class="connect-form">
+                <span class="prompt">root@skynet:~# ping</span>
+                <input type="text" id="target-ip" placeholder="Enter Target IP Address" autocomplete="off" spellcheck="false" />
+                <button id="connect-btn" class="btn">[ CONNECT ]</button>
+            </div>
+            <div id="connection-status" class="status-text">LINK STATUS: <span class="offline">OFFLINE</span></div>
+        </div>
+
+        <div class="main-interface">
+            <div class="panel log-panel">
+                <div class="panel-header">[ SYSTEM LOG ]</div>
+                <div id="system-log" class="log-content"></div>
+            </div>
+            <div class="panel chat-panel">
+                <div class="panel-header">[ ENCRYPTED COMM LINK ]</div>
+                <div id="chat-messages" class="chat-content"></div>
+                <div class="message-input-area">
+                    <span class="prompt">></span>
+                    <input type="text" id="message-input" placeholder="_" disabled autocomplete="off" spellcheck="false" />
+                    <button id="send-btn" class="btn" disabled>[ SEND ]</button>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <p>SKYNET Secure Node Interface // v1.0.4</p>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
