@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SKYNET - Secure Node Interface</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=5">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
@@ -38,15 +38,40 @@
                 <div class="message-input-area">
                     <span class="prompt">></span>
                     <input type="text" id="message-input" placeholder="_" disabled autocomplete="off" spellcheck="false" />
-                    <button id="send-btn" class="btn" disabled>[ SEND ]</button>
+                    <input type="file" id="file-input" style="display: none;" disabled />
+                    <div class="button-group">
+                        <button id="attach-btn" class="btn" title="Send File/Photo" disabled>[ ATTACH ]</button>
+                        <button id="audio-call-btn" class="btn" title="Audio Call" disabled>[ AUDIO ]</button>
+                        <button id="video-call-btn" class="btn" title="Video Call" disabled>[ VIDEO ]</button>
+                        <button id="send-btn" class="btn" disabled>[ SEND ]</button>
+                    </div>
                 </div>
             </div>
         </div>
         
+        <!-- Video Call UI -->
+        <div id="call-ui" class="panel call-overlay" style="display: none;">
+            <div class="panel-header" id="call-title">[ INCOMING CALL ]</div>
+            <div class="video-grid">
+                <div class="video-container">
+                    <video id="remote-video" autoplay playsinline></video>
+                    <div class="video-label">REMOTE_NODE</div>
+                </div>
+                <div class="video-container local-video-container">
+                    <video id="local-video" autoplay playsinline muted></video>
+                    <div class="video-label">LOCAL_NODE</div>
+                </div>
+            </div>
+            <div class="call-controls">
+                <button id="accept-call-btn" class="btn btn-success">[ ACCEPT ]</button>
+                <button id="end-call-btn" class="btn btn-danger">[ TERMINATE ]</button>
+            </div>
+        </div>
+
         <footer class="footer">
-            <p>SKYNET Secure Node Interface // v1.0.4</p>
+            <p>SKYNET Secure Node Interface // v1.0.8</p>
         </footer>
     </div>
-    <script src="script.js"></script>
+    <script src="script.js?v=4"></script>
 </body>
 </html>

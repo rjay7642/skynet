@@ -42,8 +42,10 @@ const MY_ID_LEN = 12; // Length of generated hash for ID
 let myIpLikeFormat = 
     Math.floor(Math.random()*255) + '.' + 
     Math.floor(Math.random()*255) + '.' + 
-    Math.floor(Math.random()*255) + '.' + 
     Math.floor(Math.random()*255);
+
+let localStream = null;
+let currentCall = null;
 
 // DOM Elements
 const myIpDisplay = document.getElementById('my-ip-display');
@@ -54,6 +56,17 @@ const sysLog = document.getElementById('system-log');
 const chatMessages = document.getElementById('chat-messages');
 const msgInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
+const attachBtn = document.getElementById('attach-btn');
+const audioCallBtn = document.getElementById('audio-call-btn');
+const videoCallBtn = document.getElementById('video-call-btn');
+const fileInput = document.getElementById('file-input');
+
+const callUi = document.getElementById('call-ui');
+const callTitle = document.getElementById('call-title');
+const localVideo = document.getElementById('local-video');
+const remoteVideo = document.getElementById('remote-video');
+const acceptCallBtn = document.getElementById('accept-call-btn');
+const endCallBtn = document.getElementById('end-call-btn');
 
 function appendLog(msg, type = 'sys') {
     const div = document.createElement('div');
@@ -62,6 +75,44 @@ function appendLog(msg, type = 'sys') {
     div.innerText = `[${timestamp}] ${msg}`;
     sysLog.appendChild(div);
     sysLog.scrollTop = sysLog.scrollHeight;
+}
+
+function appendFileMessage(sender, filename, filetype, dataBuffer, isSelf = false) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    
+    const senderSpan = document.createElement('span');
+    senderSpan.className = 'chat-sender';
+    senderSpan.innerText = `<${sender}>`;
+    if(isSelf) senderSpan.style.color = '#00ff9c';
+    else senderSpan.style.color = '#ff0055'; 
+    
+    div.appendChild(senderSpan);
+    
+    const textNode = document.createTextNode(` FILE TRANSFER COMPLETED: `);
+    div.appendChild(textNode);
+    
+    const blob = new Blob([dataBuffer], { type: filetype });
+    const url = URL.createObjectURL(blob);
+    
+    if (filetype.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'chat-img';
+        const br = document.createElement('br');
+        div.appendChild(br);
+        div.appendChild(img);
+    } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.innerText = `[DOWNLOAD ${filename}]`;
+        link.className = 'chat-file';
+        div.appendChild(link);
+    }
+    
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function appendMessage(sender, msg, isSelf = false) {
@@ -98,6 +149,11 @@ function initPeer() {
         appendLog(`AWAITING INCOMING CONNECTIONS...`, 'info');
     });
 
+    peer.on('call', (call) => {
+        appendLog(`INCOMING CALL FROM [${call.peer}]...`, 'warn');
+        handleIncomingCall(call);
+    });
+
     peer.on('connection', (c) => {
         if(conn && conn.open) {
             c.on('open', function() {
@@ -132,13 +188,21 @@ function setupConnection(connection) {
         
         msgInput.disabled = false;
         sendBtn.disabled = false;
+        attachBtn.disabled = false;
+        audioCallBtn.disabled = false;
+        videoCallBtn.disabled = false;
+        fileInput.disabled = false;
         msgInput.focus();
         
         appendMessage('SYSTEM', `ENCRYPTED CHANNEL ESTABLISHED WITH ${conn.peer}`);
     });
 
     conn.on('data', (data) => {
-        appendMessage(conn.peer, data, false);
+        if (data && typeof data === 'object' && data.type === 'file') {
+            appendFileMessage(conn.peer, data.filename, data.filetype, data.data, false);
+        } else {
+            appendMessage(conn.peer, data, false);
+        }
     });
 
     conn.on('close', () => {
@@ -164,6 +228,12 @@ function resetConnectionUI() {
     
     msgInput.disabled = true;
     sendBtn.disabled = true;
+    attachBtn.disabled = true;
+    audioCallBtn.disabled = true;
+    videoCallBtn.disabled = true;
+    fileInput.disabled = true;
+    
+    if(currentCall) endCall();
     
     appendMessage('SYSTEM', 'ENCRYPTED CHANNEL TERMINATED.');
 }
@@ -207,6 +277,137 @@ sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keypress', (e) => {
     if(e.key === 'Enter') sendMessage();
 });
+
+attachBtn.addEventListener('click', () => {
+    fileInput.click();
+});
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file || !conn || !conn.open) return;
+    
+    appendLog(`ENCRYPTING FILE [${file.name}] FOR SECURE TRANSFER...`, 'info');
+    
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const arrayBuffer = event.target.result;
+        
+        const payload = {
+            type: 'file',
+            filename: file.name,
+            filetype: file.type,
+            data: arrayBuffer
+        };
+        
+        conn.send(payload);
+        appendFileMessage(peer.id, file.name, file.type, arrayBuffer, true);
+        appendLog(`FILE ALGORITHM EXECUTED. TRANSFER COMPLETE.`, 'sys');
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // reset input
+    fileInput.value = '';
+});
+
+// Call Handling Logic
+async function startCall(isCamera) {
+    if(!conn || !conn.open) return;
+    
+    appendLog(`INITIATING ${isCamera ? 'VIDEO' : 'AUDIO'} HANDSHAKE...`, 'info');
+    
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: isCamera,
+            audio: true
+        });
+        
+        localVideo.srcObject = localStream;
+        callUi.style.display = 'flex';
+        callTitle.innerText = `[ OUTGOING ${isCamera ? 'VIDEO' : 'AUDIO'} CALL ]`;
+        acceptCallBtn.style.display = 'none';
+        
+        const call = peer.call(conn.peer, localStream);
+        setupCallListeners(call);
+        currentCall = call;
+        
+    } catch (err) {
+        appendLog(`MEDIA ACCESS DENIED: ${err.message}`, 'err');
+    }
+}
+
+function handleIncomingCall(call) {
+    currentCall = call;
+    callUi.style.display = 'flex';
+    callTitle.innerText = `[ INCOMING CALL: ${call.peer} ]`;
+    acceptCallBtn.style.display = 'inline-block';
+    
+    // Auto-setup remote stream when call is accepted
+    call.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
+    });
+}
+
+async function answerCall() {
+    try {
+        const isVideo = !!currentCall.options?._payload?.video; 
+        // Note: PeerJS doesn't explicitly pass type in options usually without meta
+        // But we can just default to what we have or ask for both.
+        
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: true, // Default to video if available
+            audio: true
+        });
+        
+        localVideo.srcObject = localStream;
+        currentCall.answer(localStream);
+        setupCallListeners(currentCall);
+        
+        callTitle.innerText = `[ ACTIVE CALL: ${currentCall.peer} ]`;
+        acceptCallBtn.style.display = 'none';
+        
+    } catch (err) {
+        appendLog(`MEDIA ERROR: ${err.message}`, 'err');
+        endCall();
+    }
+}
+
+function setupCallListeners(call) {
+    call.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
+        callTitle.innerText = `[ ACTIVE CALL: ${call.peer} ]`;
+    });
+    
+    call.on('close', () => {
+        endCall();
+    });
+    
+    call.on('error', (err) => {
+        appendLog(`CALL ERROR: ${err.message}`, 'err');
+        endCall();
+    });
+}
+
+function endCall() {
+    if(currentCall) {
+        currentCall.close();
+        currentCall = null;
+    }
+    
+    if(localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    
+    localVideo.srcObject = null;
+    remoteVideo.srcObject = null;
+    callUi.style.display = 'none';
+    appendLog('COMMUNICATION LINK SEVERED.', 'warn');
+}
+
+audioCallBtn.addEventListener('click', () => startCall(false));
+videoCallBtn.addEventListener('click', () => startCall(true));
+acceptCallBtn.addEventListener('click', answerCall);
+endCallBtn.addEventListener('click', endCall);
 
 // Boot up
 window.onload = initPeer;
